@@ -36,7 +36,7 @@ app logs a similar connect/disconnect line will work.
 
 ```sh
 brew install switchaudio-osx
-git clone https://github.com/<you>/auto-audio-switcher-mac.git
+git clone https://github.com/beckyunusov/auto-audio-switcher-mac.git
 cd auto-audio-switcher-mac
 ./install.sh
 ```
