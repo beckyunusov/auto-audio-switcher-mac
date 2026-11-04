@@ -1,0 +1,44 @@
+#!/bin/zsh
+# audio-switch — set the Mac's default audio devices to a wireless headset or back to the built-ins.
+#
+# Usage: audio-switch [on|off|toggle|status|devices]
+#   on       output + system sound + input -> headset
+#   off      output + system sound + input -> fallback devices
+#   toggle   flip between the two (default)
+#   status   print the current default output/input
+#   devices  list every audio device name on this Mac (use these in the config)
+#
+# Config (optional): ${XDG_CONFIG_HOME:-$HOME/.config}/auto-audio-switcher/config.sh
+# Any of the variables below can be overridden there.
+
+HEADSET_OUT="${HEADSET_OUT:-CORSAIR HS80 MAX WIRELESS Gaming Receiver}"
+HEADSET_IN="${HEADSET_IN:-CORSAIR HS80 MAX WIRELESS Gaming Receiver}"
+FALLBACK_OUT="${FALLBACK_OUT:-MacBook Pro Speakers}"
+FALLBACK_IN="${FALLBACK_IN:-MacBook Pro Microphone}"
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/auto-audio-switcher/config.sh"
+[[ -r "$CONFIG" ]] && source "$CONFIG"
+
+SAS="${SWITCHAUDIOSOURCE:-$(command -v SwitchAudioSource 2>/dev/null)}"
+if [[ -z "$SAS" ]]; then
+  echo "audio-switch: SwitchAudioSource not found. Install it with: brew install switchaudio-osx" >&2
+  exit 2
+fi
+
+set_devices() { # $1 = output name, $2 = input name
+  "$SAS" -t output -s "$1" >/dev/null && "$SAS" -t system -s "$1" >/dev/null && "$SAS" -t input -s "$2" >/dev/null
+}
+headset_on()  { set_devices "$HEADSET_OUT" "$HEADSET_IN"; }
+headset_off() { set_devices "$FALLBACK_OUT" "$FALLBACK_IN"; }
+status()      { echo "output: $("$SAS" -c -t output)"; echo "input:  $("$SAS" -c -t input)"; }
+
+case "${1:-toggle}" in
+  on)      headset_on;  status ;;
+  off)     headset_off; status ;;
+  status)  status ;;
+  devices) echo "-- output --"; "$SAS" -a -t output; echo "-- input --"; "$SAS" -a -t input ;;
+  toggle)
+    if [[ "$("$SAS" -c -t output)" == "$HEADSET_OUT" ]]; then headset_off; else headset_on; fi
+    status ;;
+  *) echo "usage: audio-switch [on|off|toggle|status|devices]" >&2; exit 1 ;;
+esac

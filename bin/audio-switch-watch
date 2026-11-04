@@ -1,0 +1,53 @@
+#!/bin/zsh
+# audio-switch-watch — switch the Mac's default audio automatically when a wireless
+# headset is powered on or off.
+#
+# A 2.4 GHz USB receiver is always enumerated as an audio device, so macOS cannot tell
+# whether the headset itself is on. The vendor's desktop app can, and it writes the
+# headset's connection state to its own log, e.g.
+#   cue.dev.connection_controller: "HS80 MAX WIRELESS" Disconnected -> Wireless
+# This script polls the newest log file for that line and calls `audio-switch on|off`
+# whenever the state changes. The vendor app must be running.
+#
+# Config (optional): ${XDG_CONFIG_HOME:-$HOME/.config}/auto-audio-switcher/config.sh
+#   HEADSET_LOG_NAME   device name as it appears in the log   (default: HS80 MAX WIRELESS)
+#   VENDOR_LOG_DIR     directory holding the vendor app's logs  (default: iCUE 5 log dir)
+#   POLL_INTERVAL      seconds between checks                   (default: 2)
+
+HEADSET_LOG_NAME="${HEADSET_LOG_NAME:-HS80 MAX WIRELESS}"
+VENDOR_LOG_DIR="${VENDOR_LOG_DIR:-$HOME/Library/Application Support/Corsair/Logs/CUE5}"
+POLL_INTERVAL="${POLL_INTERVAL:-2}"
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/auto-audio-switcher/config.sh"
+[[ -r "$CONFIG" ]] && source "$CONFIG"
+
+# Resolve the sibling audio-switch script even when this file is reached through a symlink.
+SWITCH="${0:A:h}/audio-switch"
+[[ -x "$SWITCH" ]] || SWITCH="$(command -v audio-switch)"
+if [[ -z "$SWITCH" ]]; then
+  echo "audio-switch-watch: cannot find audio-switch next to this script or on PATH" >&2
+  exit 2
+fi
+
+current_state() {
+  local newest line
+  newest=$(ls -t "$VENDOR_LOG_DIR"/*.log 2>/dev/null | head -1)
+  [[ -n "$newest" ]] || { echo unknown; return; }
+  line=$(grep -h "connection_controller: \"$HEADSET_LOG_NAME\"" "$newest" | tail -1)
+  case "$line" in
+    *'-> Wireless'*|*'-> Wired'*|*'-> Connected'*) echo on ;;
+    *'-> Disconnected'*)                           echo off ;;
+    *)                                             echo unknown ;;
+  esac
+}
+
+last=""
+while true; do
+  state=$(current_state)
+  if [[ "$state" != unknown && "$state" != "$last" ]]; then
+    "$SWITCH" "$state" >/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') headset $state"
+    last="$state"
+  fi
+  sleep "$POLL_INTERVAL"
+done
